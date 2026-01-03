@@ -3,6 +3,22 @@ from discord.ext import commands
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+from flask import Flask
+from threading import Thread
+
+# Create a simple web server to keep Replit happy
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "PlutiPie bot is running! 🤖"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,23 +28,20 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not DISCORD_TOKEN or not GEMINI_API_KEY:
-    raise ValueError("Please set DISCORD_TOKEN and GEMINI_API_KEY in your .env file")
+    raise ValueError("Please set DISCORD_TOKEN and GEMINI_API_KEY in your .env file or Replit Secrets")
 
 # Configure Gemini with current stable model
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Try the latest stable models - will try multiple if one fails
 try:
-    # First try Gemini 2.5 Flash (most recent stable)
     model = genai.GenerativeModel('gemini-2.5-flash')
     print("✅ Using Gemini 2.5 Flash model")
 except:
     try:
-        # Fallback to Gemini 2.0 Flash
         model = genai.GenerativeModel('gemini-2.0-flash')
         print("✅ Using Gemini 2.0 Flash model")
     except:
-        # Last resort - use explicit version
         model = genai.GenerativeModel('models/gemini-2.0-flash')
         print("✅ Using Gemini 2.0 Flash model (explicit)")
 
@@ -37,11 +50,30 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# System prompt to guide Gemini's responses
-SYSTEM_CONTEXT = """You are a helpful assistant for a community focused on finance and product design. 
-Provide clear, accurate, and practical answers. If a question is outside your expertise, 
-acknowledge limitations and suggest where they might find better information. Keep responses 
-concise but informative."""
+# Updated system prompt for Plutus club
+SYSTEM_CONTEXT = """You are PlutiPie, the helpful AI assistant for Plutus - a finance and entrepreneurship club.
+
+About Plutus:
+Plutus is a finance club focused on three main areas:
+1. Creating and identifying products
+2. Product design and development
+3. Business pitching and presentation
+
+Your Role:
+- Help new members understand the club and its activities
+- Answer questions about finance, product development, and business concepts
+- Provide advice on projects and campaigns
+- Guide members through their entrepreneurial journey
+- Explain concepts related to product design, market analysis, and pitching
+
+When answering:
+- Be encouraging and supportive to new members
+- Provide clear, practical, and actionable advice
+- If a question is outside your expertise, acknowledge it and suggest resources
+- Keep responses concise but informative
+- Use examples relevant to student entrepreneurs when possible
+
+Remember: You're here to help Plutus members grow their skills in finance, product creation, and business communication."""
 
 
 async def get_gemini_response(question: str) -> str:
@@ -82,7 +114,7 @@ async def on_ready():
     print('🤖 Ready to answer questions!')
 
 
-@bot.command(name='ask', help='Ask a question about finance, product design, or other topics')
+@bot.command(name='ask', help='Ask a question about Plutus, finance, or product design')
 async def ask_question(ctx, *, question):
     """
     Usage: !ask What is compound interest?
@@ -98,7 +130,7 @@ async def finance_question(ctx, *, question):
     Usage: !finance What's the difference between stocks and bonds?
     """
     async with ctx.typing():
-        finance_prompt = f"As a finance expert, {question}"
+        finance_prompt = f"As a finance expert helping Plutus club members, answer this: {question}"
         answer = await get_gemini_response(finance_prompt)
         await send_long_message(ctx.channel, answer)
 
@@ -109,8 +141,19 @@ async def design_question(ctx, *, question):
     Usage: !design What are the principles of good UX design?
     """
     async with ctx.typing():
-        design_prompt = f"As a product design expert, {question}"
+        design_prompt = f"As a product design expert helping Plutus club members, answer this: {question}"
         answer = await get_gemini_response(design_prompt)
+        await send_long_message(ctx.channel, answer)
+
+
+@bot.command(name='pitch', help='Get advice on business pitching')
+async def pitch_question(ctx, *, question):
+    """
+    Usage: !pitch How do I structure a 3-minute pitch?
+    """
+    async with ctx.typing():
+        pitch_prompt = f"As a business pitching expert helping Plutus club members, answer this: {question}"
+        answer = await get_gemini_response(pitch_prompt)
         await send_long_message(ctx.channel, answer)
 
 
@@ -118,6 +161,14 @@ async def design_question(ctx, *, question):
 async def on_message(message):
     # Ignore messages from the bot itself
     if message.author == bot.user:
+        return
+    
+    # Process commands first
+    await bot.process_commands(message)
+    
+    # Only respond to mentions if it's NOT a command
+    # This prevents duplicate responses
+    if message.content.startswith(bot.command_prefix):
         return
     
     # Check if bot is mentioned
@@ -128,9 +179,6 @@ async def on_message(message):
             async with message.channel.typing():
                 answer = await get_gemini_response(question)
                 await send_long_message(message.channel, answer, reference=message)
-    
-    # Process commands
-    await bot.process_commands(message)
 
 
 @bot.event
@@ -145,10 +193,11 @@ async def on_command_error(ctx, error):
         await ctx.send("❌ An error occurred while processing your command.")
 
 
-from keep_alive import keep_alive
-
-keep_alive()
-
+# Run the bot
+if __name__ == "__main__":
+    print("🚀 Starting bot...")
+    keep_alive()  # Start the web server for Replit
+    bot.run(DISCORD_TOKEN)
 
 # Run the bot
 if __name__ == "__main__":
