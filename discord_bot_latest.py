@@ -145,6 +145,11 @@ async def on_command_error(ctx, error):
         await ctx.send("❌ An error occurred while processing your command.")
 
 
+from keep_alive import keep_alive
+
+keep_alive()
+
+
 # Run the bot
 if __name__ == "__main__":
     print("🚀 Starting bot...")
